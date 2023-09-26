@@ -18,6 +18,7 @@ class DataWardenDataset:
         self.dataset = dataset
         self.train_questions, self.train_answers = [], []
         self.test_questions, self.test_answers = [], []
+        self.dataset_type = None
 
         self._process_dataset(self.dataset['train'])
         self._process_dataset(self.dataset['test'])
@@ -35,6 +36,7 @@ class DataWardenDataset:
         questions, answers = [], []
 
         if 'instruction' in dataset_subset.features:
+            self.dataset_type = 'alpaca'
             # Extract 'instruction' and 'input' as questions, 'output' as answers
             for row in dataset_subset:
                 question = f"{row['instruction']} {row['input']}"
@@ -42,6 +44,7 @@ class DataWardenDataset:
                 questions.append([question])
                 answers.append([answer])
         elif 'conversations' in dataset_subset.features:
+            self.dataset_type = 'sharegpt'
             # Extract 'value' where 'from' is 'human' as questions, 'gpt' as answers
             for row in dataset_subset:
                 conversation = row['conversations']
@@ -50,6 +53,7 @@ class DataWardenDataset:
                 questions.append(human_messages)
                 answers.append(gpt_messages)
         elif 'text' in dataset_subset.features:
+            self.dataset_type = 'raw'
             # Extract text after 'Human:' as questions, after 'Assistant:' as answers
             for row in dataset_subset:
                 text_segments = row['text'].split('### ')
@@ -96,3 +100,42 @@ class DataWardenDataset:
             problematic_rows_train, clean_rows_train, problematic_indexes_train, clean_indexes_train,
             problematic_rows_test, clean_rows_test, problematic_indexes_test, clean_indexes_test
         )
+    
+    def remove_problematic_rows(self, tokenizer: PreTrainedTokenizer, min_tokens_question: int = 256, min_tokens_answer: int = 256):
+        """
+        Remove problematic rows from the dataset.
+
+        Args:
+            tokenizer (PreTrainedTokenizer): The tokenizer to use for encoding text.
+            min_tokens_question (int, optional): The minimum number of tokens required for questions. Defaults to 256.
+            min_tokens_answer (int, optional): The minimum number of tokens required for answers. Defaults to 256.
+        """
+        # Get the problematic rows and clean rows for both train and test datasets
+        (problematic_rows_train, clean_rows_train, _, _,
+         problematic_rows_test, clean_rows_test, _, _) = self.get_token_counts(tokenizer, min_tokens_question, min_tokens_answer)
+
+        # Check if clean_rows_train and clean_rows_test are not empty
+        if clean_rows_train:
+            # Remove problematic rows from the train dataset
+            self.train_data = clean_rows_train
+
+            # Update the train questions and answers
+            self.train_questions, self.train_answers = zip(*clean_rows_train)
+        else:
+            # If clean_rows_train is empty, set train_data and related attributes to empty lists
+            self.train_data = []
+            self.train_questions = []
+            self.train_answers = []
+
+        # Check if clean_rows_test is not empty
+        if clean_rows_test:
+            # Remove problematic rows from the test dataset
+            self.test_data = clean_rows_test
+
+            # Update the test questions and answers
+            self.test_questions, self.test_answers = zip(*clean_rows_test)
+        else:
+            # If clean_rows_test is empty, set test_data and related attributes to empty lists
+            self.test_data = []
+            self.test_questions = []
+            self.test_answers = []
