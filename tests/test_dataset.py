@@ -77,8 +77,8 @@ def test_init(sample_dataset):
 
 def test_get_token_counts(sample_dataset_with_tokens):
     dataset, tokenizer = sample_dataset_with_tokens
-    min_tokens_question = 10
-    min_tokens_answer = 10
+    min_tokens_question = 5
+    min_tokens_answer = 5
 
     (
         problematic_rows_train,
@@ -90,15 +90,74 @@ def test_get_token_counts(sample_dataset_with_tokens):
         problematic_indexes_test,
         clean_indexes_test,
     ) = dataset.get_token_counts(tokenizer, min_tokens_question, min_tokens_answer)
-    
-    assert isinstance(problematic_rows_train, list)
-    assert isinstance(clean_rows_train, list)
-    assert isinstance(problematic_indexes_train, list)
-    assert isinstance(clean_indexes_train, list)
-    assert isinstance(problematic_rows_test, list)
-    assert isinstance(clean_rows_test, list)
-    assert isinstance(problematic_indexes_test, list)
-    assert isinstance(clean_indexes_test, list)
+
+    if sample_dataset_with_tokens[0].dataset_type == 'alpaca':
+        assert problematic_rows_train == [(['instr1 input1'], ['output1']), (['instr2 input2'], ['output2'])] 
+        assert clean_rows_train == []
+        assert problematic_indexes_train == [0, 1]
+        assert clean_indexes_train == []
+        assert problematic_rows_test == []
+        assert clean_rows_test == [(['test_instr1 test_input1'], ['test_output1']), (['test_instr2 test_input2'], ['test_output2'])]
+        assert problematic_indexes_test == []
+        assert clean_indexes_test == [0, 1]
+    elif sample_dataset_with_tokens[0].dataset_type == 'sharegpt':
+        assert problematic_rows_train == [(['Hello'], ['Hi'])]
+        assert clean_rows_train == [(['How are you?'], ['I am fine.'])]
+        assert problematic_indexes_train == [0]
+        assert clean_indexes_train == [1]
+        assert problematic_rows_test == [(['Good morning'], ['Good morning!'])]
+        assert clean_rows_test == [(['What is your name?'], ['I am a chatbot.'])]
+        assert problematic_indexes_test == [0]
+        assert clean_indexes_test == [1]
+    elif sample_dataset_with_tokens[0].dataset_type == 'raw':
+        assert problematic_rows_train == []
+        assert clean_rows_train == [(['How are you?'], ['I am fine.']), (['What is your name?'], ['I am a chatbot.'])]
+        assert problematic_indexes_train == []
+        assert clean_indexes_train == [0, 1]
+        assert problematic_rows_test == [(['Good morning'], ['Good morning!'])]
+        assert clean_rows_test == [(['How can I help you?'], ['You can ask me anything.'])]
+        assert problematic_indexes_test == [0]
+        assert clean_indexes_test == [1]
+
+def test_remove_problematic_rows(sample_dataset_with_tokens):
+    dataset, tokenizer = sample_dataset_with_tokens
+    min_tokens_question = 5
+    min_tokens_answer = 5
+
+    # Calculate token counts before removing problematic rows
+    (
+        problematic_rows_train_before,
+        clean_rows_train_before,
+        problematic_indexes_train_before,
+        clean_indexes_train_before,
+        problematic_rows_test_before,
+        clean_rows_test_before,
+        problematic_indexes_test_before,
+        clean_indexes_test_before,
+    ) = dataset.get_token_counts(tokenizer, min_tokens_question, min_tokens_answer)
+
+    # Remove problematic rows
+    dataset.remove_problematic_rows(tokenizer, min_tokens_question, min_tokens_answer)
+
+    # Calculate token counts after removing problematic rows
+    (
+        problematic_rows_train_after,
+        clean_rows_train_after,
+        problematic_indexes_train_after,
+        clean_indexes_train_after,
+        problematic_rows_test_after,
+        clean_rows_test_after,
+        problematic_indexes_test_after,
+        clean_indexes_test_after,
+    ) = dataset.get_token_counts(tokenizer, min_tokens_question, min_tokens_answer)
+
+    # Ensure that the number of clean rows has increased
+    assert dataset.train_data == clean_rows_train_after
+    assert dataset.test_data == clean_rows_test_after
+
+    # Ensure that no problematic rows are left
+    assert len(problematic_rows_train_after) == 0
+    assert len(problematic_rows_test_after) == 0
 
 if __name__ == "__main__":
     pytest.main()
