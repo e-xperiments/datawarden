@@ -1,28 +1,55 @@
-from typing import List, Tuple
+from typing import List, Tuple, Union
 from transformers import PreTrainedTokenizer
 
-def analyze_token_counts(dataset: List[Tuple[List[str], List[str]]], tokenizer: PreTrainedTokenizer, min_tokens_question: int = 256, min_tokens_answer: int = 256) -> Tuple[List[Tuple[List[str], List[str]]], List[Tuple[List[str], List[str]]], List[int], List[int]]:
+# typehints
+TokenList = List[str]
+QuestionAnswerPair = Tuple[TokenList, TokenList]
+Dataset = List[QuestionAnswerPair]
+
+
+class AnalysisResult:
+    def __init__(self):
+        self.problematic_rows: Dataset = []
+        self.clean_rows: Dataset = []
+        self.problematic_indexes: List[int] = []
+        self.clean_indexes: List[int] = []
+
+
+def analyze_token_counts(
+    dataset: Dataset,
+    tokenizer: PreTrainedTokenizer,
+    min_tokens_question: int = 256,
+    min_tokens_answer: int = 256,
+) -> AnalysisResult:
     """
     Analyze token counts in the dataset.
 
     Args:
-        dataset (List[Tuple[List[str], List[str]]]): A list of pairs where the first element is a list of tokens for the question,
+        dataset (Dataset): A list of pairs where the first element is a list of tokens for the question,
             and the second element is a list of tokens for the answer.
         tokenizer (PreTrainedTokenizer): The tokenizer to use for encoding text.
         min_tokens_question (int, optional): The minimum number of tokens required for questions. Defaults to 256.
         min_tokens_answer (int, optional): The minimum number of tokens required for answers. Defaults to 256.
 
     Returns:
-        Tuple[List[Tuple[List[str], List[str]]], List[Tuple[List[str], List[str]]], List[int], List[int]]: A tuple containing four lists -
-            - problematic_rows: Pairs with either the question or answer having fewer than the specified min_tokens.
-            - clean_rows: Pairs with both the question and answer having at least the specified min_tokens.
-            - problematic_indexes: Indexes of problematic rows in the input dataset.
-            - clean_indexes: Indexes of clean rows in the input dataset.
+        AnalysisResult: An object encapsulating the results of the analysis.
     """
-    problematic_rows = [(question, answer) for question, answer in dataset if sum(len(tokenizer.encode(tokens)) for tokens in question) < min_tokens_question or sum(len(tokenizer.encode(tokens)) for tokens in answer) < min_tokens_answer]
-    clean_rows = [(question, answer) for question, answer in dataset if sum(len(tokenizer.encode(tokens)) for tokens in question) >= min_tokens_question and sum(len(tokenizer.encode(tokens)) for tokens in answer) >= min_tokens_answer]
-    
-    problematic_indexes = [i for i, (question, answer) in enumerate(dataset) if (question, answer) in problematic_rows]
-    clean_indexes = [i for i, (question, answer) in enumerate(dataset) if (question, answer) in clean_rows]
-    
-    return problematic_rows, clean_rows, problematic_indexes, clean_indexes
+    result = AnalysisResult()
+
+    for idx, (question, answer) in enumerate(dataset):
+        question_tokens_count = sum(
+            len(tokenizer.encode(tokens)) for tokens in question
+        )
+        answer_tokens_count = sum(len(tokenizer.encode(tokens)) for tokens in answer)
+
+        if (
+            question_tokens_count < min_tokens_question
+            or answer_tokens_count < min_tokens_answer
+        ):
+            result.problematic_rows.append((question, answer))
+            result.problematic_indexes.append(idx)
+        else:
+            result.clean_rows.append((question, answer))
+            result.clean_indexes.append(idx)
+
+    return result
